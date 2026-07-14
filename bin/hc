@@ -1,0 +1,51 @@
+#!/bin/bash
+# hc — one-word front door for HTML Collaborator.
+#   hc share <file.html>     share a file for review (starts servers if needed)
+#   hc export <docId> [dir]  save the next .vN.html (never overwrites)
+#   hc open [docId]          open the app (or a specific doc) in the browser
+#   hc up                    just start the servers
+set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_URL="${APP_URL:-http://localhost:5180}"
+
+ensure_up() {
+  if ! nc -z localhost 1234 2>/dev/null; then
+    (cd "$ROOT" && nohup node server/index.js >/tmp/hc-server.log 2>&1 &)
+    echo "started sync server"
+  fi
+  if ! nc -z localhost 5180 2>/dev/null; then
+    (cd "$ROOT" && nohup npx vite --port 5180 >/tmp/hc-vite.log 2>&1 &)
+    echo "started app"
+  fi
+  # wait until both answer (max ~5s)
+  for i in $(seq 1 25); do
+    nc -z localhost 1234 2>/dev/null && nc -z localhost 5180 2>/dev/null && return 0
+    sleep 0.2
+  done
+  echo "servers did not come up — check /tmp/hc-server.log and /tmp/hc-vite.log" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  share)
+    [ -f "${2:-}" ] || { echo "usage: hc share <file.html>"; exit 1; }
+    ensure_up
+    node "$ROOT/bin/share.js" "$2"
+    ;;
+  export)
+    [ -n "${2:-}" ] || { echo "usage: hc export <docId> [outDir]"; exit 1; }
+    ensure_up
+    node "$ROOT/bin/share.js" --export "$2" "${3:-.}"
+    ;;
+  open)
+    ensure_up
+    open "$APP_URL/${2:+review/$2}"
+    ;;
+  up)
+    ensure_up
+    echo "ready: $APP_URL"
+    ;;
+  *)
+    sed -n '2,6p' "$0" | sed 's/^# //'
+    ;;
+esac

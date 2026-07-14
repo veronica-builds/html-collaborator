@@ -1,0 +1,16 @@
+# Claude Code agent files
+# Remove CLAUDE.md from this list if the project is intentionally open source
+# and the file contains only coding conventions with no internal details.
+CLAUDE.md
+CONTEXT.md
+.claude/memory.md
+.claude/handoffs/
+.claude/settings.local.json
+
+# Node
+node_modules/
+dist/
+
+# Local data
+*.sqlite
+.env
