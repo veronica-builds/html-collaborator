@@ -17,7 +17,7 @@ function pseudonym() {
 export function getIdentity() {
   const guest = new URLSearchParams(window.location.search).get('guest')
   if (guest) {
-    // Token format: <display name>-<suffix>, e.g. "Ryan Smith-x8k2".
+    // Token format: <display name>-<suffix>, e.g. "Sam Reviewer-x8k2".
     // ponytail: the link carries the name; honor-system like the prompt.
     // Server-side token→name lookup is the upgrade if links ever need revoking.
     const name = guest.replace(/-[a-z0-9]+$/i, '').trim() || guest
