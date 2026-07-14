@@ -4,6 +4,8 @@
 #   hc export <docId> [dir]  save the next .vN.html (never overwrites)
 #   hc open [docId]          open the app (or a specific doc) in the browser
 #   hc up                    just start the servers
+#   hc tunnel                expose the app publicly (Cloudflare quick tunnel)
+#   hc tunnel down           stop the tunnels, back to localhost-only
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_URL="${APP_URL:-http://localhost:5180}"
@@ -44,6 +46,36 @@ case "${1:-}" in
   up)
     ensure_up
     echo "ready: $APP_URL"
+    ;;
+  tunnel)
+    if [ "${2:-}" = "down" ]; then
+      pkill -f "cloudflared tunnel" 2>/dev/null || true
+      pkill -f "vite --port 5180" 2>/dev/null || true
+      (cd "$ROOT" && nohup npx vite --port 5180 >/tmp/hc-vite.log 2>&1 &)
+      echo "tunnels stopped — links are localhost-only again"
+      exit 0
+    fi
+    command -v cloudflared >/dev/null || { echo "cloudflared missing: brew install cloudflared"; exit 1; }
+    ensure_up
+    pkill -f "cloudflared tunnel" 2>/dev/null || true
+    tunnel_url() { # start a quick tunnel for a port, print its public URL
+      nohup cloudflared tunnel --url "http://localhost:$1" >"/tmp/hc-tunnel-$1.log" 2>&1 &
+      for i in $(seq 1 40); do
+        u=$(grep -o 'https://[a-z-]*\.trycloudflare\.com' "/tmp/hc-tunnel-$1.log" | head -1)
+        [ -n "$u" ] && { echo "$u"; return; }
+        sleep 0.5
+      done
+      echo "tunnel for port $1 failed — see /tmp/hc-tunnel-$1.log" >&2; exit 1
+    }
+    SYNC_PUB=$(tunnel_url 1234)
+    APP_PUB=$(tunnel_url 5180)
+    # Restart the app so it points browsers at the public sync URL.
+    pkill -f "vite --port 5180" 2>/dev/null || true
+    (cd "$ROOT" && VITE_SYNC_URL="${SYNC_PUB/https/wss}" nohup npx vite --port 5180 >/tmp/hc-vite.log 2>&1 &)
+    sleep 3
+    echo ""
+    echo "Public link (share this):  $APP_PUB"
+    echo "Lives while this Mac is awake. New URL each time. 'hc tunnel down' to stop."
     ;;
   *)
     sed -n '2,6p' "$0" | sed 's/^# //'
